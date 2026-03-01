@@ -1,0 +1,109 @@
+name: Android CI Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+          cache: "gradle"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+          components: rust-src
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26b
+          add-to-path: true
+
+      - name: Build APK via Script
+        run: |
+          chmod +x build_android.sh
+          ./build_android.sh
+
+      - name: Rename APK
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
+          mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/Rin-debug-${SHORT_SHA}.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rin-debug-${{ env.SHORT_SHA }}
+          path: android/app/build/outputs/apk/debug/Rin-debug-${{ env.SHORT_SHA }}.apk
+
+      - name: Notify Telegram on Success
+        if: ${{ success() && env.BOT_TOKEN != '' }}
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: |
+          APK_PATH="android/app/build/outputs/apk/debug/Rin-debug-${{ env.SHORT_SHA }}.apk"
+
+          # Get commit message and escape special characters
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" | sed 's/[<>&"]/\\&/g')
+
+          COMMIT_URL="${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+          WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          CAPTION="<b>Rin Debug Build</b>
+          Branch: $GITHUB_REF_NAME
+
+          <blockquote><code>$COMMIT_MSG</code></blockquote>
+
+          <a href=\"$COMMIT_URL\">Commit</a> | <a href=\"$WORKFLOW_URL\">Workflow</a>"
+
+          curl -s -X POST "https://botapi.arasea.dpdns.org/bot$BOT_TOKEN/sendDocument" \
+              -F chat_id="$CHAT_ID" \
+              -F document=@"$APK_PATH" \
+              -F parse_mode="HTML" \
+              -F disable_web_page_preview="true" \
+              --form-string "caption=$CAPTION"
+
+      - name: Notify Telegram on Failure
+        if: ${{ failure() && env.BOT_TOKEN != '' }}
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: |
+          # Get commit message and escape special characters
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" | sed 's/[<>&"]/\\&/g')
+
+          COMMIT_URL="${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+          WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          MESSAGE="<b>Rin Debug Build Failed</b>
+          Branch: $GITHUB_REF_NAME
+
+          <blockquote><code>$COMMIT_MSG</code></blockquote>
+
+          <a href=\"$COMMIT_URL\">Commit</a> | <a href=\"$WORKFLOW_URL\">View Logs</a>"
+
+          curl -s -X POST "https://botapi.arasea.dpdns.org/bot$BOT_TOKEN/sendMessage" \
+              -d chat_id="$CHAT_ID" \
+              -d parse_mode="HTML" \
+              -d disable_web_page_preview="true" \
+              --data-urlencode "text=$MESSAGE"
