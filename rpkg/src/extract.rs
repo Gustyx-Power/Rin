@@ -181,7 +181,7 @@ pub fn extract_deb<R: Read>(reader: R, target_dir: &Path) -> anyhow::Result<Vec<
                         let mut content = Vec::new();
                         file.read_to_end(&mut content)?;
                         
-                        let is_elf = content.starts_with(b"\x7FELF");
+                        let _is_elf = content.starts_with(b"\x7FELF");
                         let patched = patch_content(&content);
 
                         let dest_str = dest_path.to_string_lossy();
