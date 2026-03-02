@@ -46,15 +46,19 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
 
     let home_dir_str: String = env
         .with_env(|env| -> jni::errors::Result<String> {
-            let java_str = env.get_string(&home_dir)?;
-            Ok(java_str.into())
+            let jstr: jni::objects::JString = home_dir;
+            #[allow(deprecated)]
+            let java_str = env.get_string(&jstr).map(|s| String::from(s))?;
+            Ok(java_str)
         })
         .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
 
     let mut username_str: String = env
         .with_env(|env| -> jni::errors::Result<String> {
-            let java_str = env.get_string(&username)?;
-            Ok(java_str.into())
+            let jstr: jni::objects::JString = username;
+            #[allow(deprecated)]
+            let java_str = env.get_string(&jstr).map(|s| String::from(s))?;
+            Ok(java_str)
         })
         .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
 

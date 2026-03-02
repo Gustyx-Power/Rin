@@ -39,18 +39,15 @@ impl Renderer for ScreenRenderer {
     }
 }
 
-#[warn(dead_code)]
 pub struct AndroidRenderer {
     canvas_ptr: Option<usize>,
-    font_size: f32,
     dirty: bool,
 }
 
 impl AndroidRenderer {
-    pub fn new(font_size: f32) -> Self {
+    pub fn new(_font_size: f32) -> Self {
         Self {
             canvas_ptr: None,
-            font_size,
             dirty: true,
         }
     }
