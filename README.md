@@ -41,8 +41,8 @@ It provides **seamless terminal access and robust package management** on Androi
 
 - Android Studio (latest version)
 - Android SDK (API 31+)
-- Rust toolchain (with `aarch64-linux-android` target)
-- NDK 26.1.10909125
+- Rust toolchain with `cargo-ndk` installed
+- NDK 28.2.13676358 (or compatible version)
 
 ### Local Development
 
@@ -53,25 +53,38 @@ It provides **seamless terminal access and robust package management** on Androi
    cd Rin
    ```
 
-2. Setup configuration files:
+2. Install `cargo-ndk` (required for building Rust libraries for Android):
 
    ```bash
-   cp local.properties.template local.properties
-   cp gradle.properties.template gradle.properties
+   cargo install cargo-ndk
    ```
 
-3. Edit `local.properties` with your Android SDK and NDK paths:
+3. Set up Android NDK environment variable:
 
-   ```properties
-   sdk.dir=/path/to/your/android/sdk
-   ndk.dir=/path/to/your/android/ndk/26.1.10909125
+   **Linux/macOS:**
+   ```bash
+   export ANDROID_NDK_HOME=/path/to/your/android/sdk/ndk/28.2.13676358
    ```
 
-4. Build the Rust JNI binary via cargo and compile the APK:
+   **Windows:**
+   ```cmd
+   set ANDROID_NDK_HOME=C:\Users\YourName\AppData\Local\Android\Sdk\ndk\28.2.13676358
+   ```
+
+4. Build the Rust JNI binary and compile the APK:
+
+   **Linux/macOS:**
    ```bash
    ./build_android.sh
    cd android
    ./gradlew assembleDebug
+   ```
+
+   **Windows:**
+   ```cmd
+   build_android.bat
+   cd android
+   gradlew.bat assembleDebug
    ```
 
 ### Security Notice

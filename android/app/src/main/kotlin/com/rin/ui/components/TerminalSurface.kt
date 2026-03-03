@@ -35,7 +35,7 @@ fun TerminalSurface(
     modifier: Modifier = Modifier,
     onInput: (ByteArray) -> Unit = {}
 ) {
-    var fontSize by remember { mutableFloatStateOf(13f) } // Reduced from 18f
+    var fontSize by remember { mutableFloatStateOf(11f) }
     var ctrlState by remember { mutableStateOf(ctrlPressed) }
     var cursorVisible by remember { mutableStateOf(true) }
     val colorScheme = rememberTerminalColorScheme()
@@ -115,7 +115,10 @@ private class TerminalCanvasView(context: Context) : View(context) {
         get() = textPaint.measureText("W")
 
     private val lineHeight: Float
-        get() = textPaint.fontSpacing
+        get() {
+            val metrics = textPaint.fontMetrics
+            return metrics.descent - metrics.ascent
+        }
 
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
@@ -133,13 +136,13 @@ private class TerminalCanvasView(context: Context) : View(context) {
         isFocusable = true
         isFocusableInTouchMode = true
         updatePaint()
-        
-        // Refresh at ~30fps for cursor blink and terminal updates
-        // Battery-friendly compared to 60fps while still responsive
+    
         postDelayed(object : Runnable {
             override fun run() {
-                invalidate()
-                postDelayed(this, 33) // ~30fps
+                if (engineHandle != 0L && RinLib.hasDirtyRows(engineHandle)) {
+                    invalidate()
+                }
+                postDelayed(this, 33)
             }
         }, 33)
     }

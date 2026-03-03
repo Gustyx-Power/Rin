@@ -12,10 +12,10 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+.cargo
 features.html
 
 # Scripts
-build_android.sh
 run_android.sh
 
 # Android specific
@@ -23,8 +23,11 @@ android/build/
 android/app/build/
 android/.gradle/
 android/app/src/main/jniLibs/
+android/gradle/gradle-daemon-jvm.properties
+
 
 # Keystores and secrets
 *.keystore
 *.jks
 keystore-b64.txt
+android/android/app/src/main/jniLibs/arm64-v8a/librpkg.so
