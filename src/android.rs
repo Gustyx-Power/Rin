@@ -121,13 +121,11 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
             return -1;
         }
     };
-
-    // 3. Spawn Reader Thread (PTY -> Engine)
     let pty_clone = pty.clone();
     let engine_clone = engine.clone();
 
     thread::spawn(move || {
-        let mut buffer = [0u8; 4096];
+        let mut buffer = [0u8; 16384];
         let mut reader = {
             let mut pty_guard = pty_clone.lock().unwrap();
             match pty_guard.take_reader() {
@@ -140,12 +138,15 @@ pub extern "system" fn Java_com_rin_RinLib_createEngine(
         };
 
         loop {
+            // Blocking read
             match reader.read(&mut buffer) {
                 Ok(0) => {
                     log::info!("PTY closed (EOF)");
                     break;
                 }
                 Ok(n) => {
+                    thread::sleep(std::time::Duration::from_millis(2));
+
                     let mut engine_guard = engine_clone.lock().unwrap();
                     if let Err(e) = engine_guard.write(&buffer[..n]) {
                         log::error!("Failed to write to engine: {}", e);

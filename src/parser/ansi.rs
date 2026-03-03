@@ -64,6 +64,11 @@ pub enum Command {
     SetOriginMode(bool),
     SetAutoWrapMode(bool),
     CopyToClipboard(String),
+    MoveCursorToRow(usize),
+    MoveCursorToColumn(usize),
+    CursorNextLine(usize),
+    CursorPreviousLine(usize),
+    ReverseIndex,
 }
 
 /// Mouse tracking modes
@@ -311,6 +316,31 @@ impl Perform for AnsiPerformer {
                     },
                 });
             }
+            'd' => {
+                // VPA - Vertical Position Absolute
+                let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1);
+                self.commands.push(Command::MoveCursorToRow(n.saturating_sub(1) as usize));
+            }
+            'G' | '`' => {
+                // CHA / HPA - Cursor Character/Horizontal Absolute
+                let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1);
+                self.commands.push(Command::MoveCursorToColumn(n.saturating_sub(1) as usize));
+            }
+            'E' => {
+                // CNL - Cursor Next Line
+                let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as usize;
+                self.commands.push(Command::CursorNextLine(n));
+            }
+            'F' => {
+                // CPL - Cursor Previous Line
+                let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as usize;
+                self.commands.push(Command::CursorPreviousLine(n));
+            }
+            'X' => {
+                // ECH - Erase Character
+                let n = *params.iter().next().and_then(|p| p.first()).unwrap_or(&1) as usize;
+                self.commands.push(Command::EraseChars(n));
+            }
             _ => {}
         }
     }
@@ -331,11 +361,16 @@ impl Perform for AnsiPerformer {
             }
         }
 
-        match byte {
+         match byte {
             b'c' => self.commands.push(Command::Reset),
             b'7' => self.commands.push(Command::SaveCursor), // DECSC
             b'8' => self.commands.push(Command::RestoreCursor), // DECRC
             b'H' => self.commands.push(Command::SetTabStop), // HTS
+            b'M' => self.commands.push(Command::ReverseIndex), // RI
+            b'D' => {
+                // IND - Index
+                self.commands.push(Command::Execute(b'\n'));
+            }
             _ => {}
         }
     }

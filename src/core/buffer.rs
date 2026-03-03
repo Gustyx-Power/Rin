@@ -220,13 +220,14 @@ impl TerminalBuffer {
         }
 
         // Handle line wrap
-        // Handle line wrap
         if self.cursor_x >= self.grid.width() {
             if self.auto_wrap_mode {
                 self.cursor_x = 0;
-                self.cursor_y += 1;
-                if self.cursor_y >= self.grid.height() {
+                let (_, bottom) = self.effective_scroll_region();
+                if self.cursor_y >= bottom {
                     self.scroll_up(1);
+                } else {
+                    self.cursor_y += 1;
                 }
             } else {
                 self.cursor_x = self.grid.width().saturating_sub(1);
@@ -247,21 +248,30 @@ impl TerminalBuffer {
         self.cursor_x = width.saturating_sub(1);
     }
 
+    /// Returns (top, bottom) of the effective scroll region, defaulting to full screen.
+    fn effective_scroll_region(&self) -> (usize, usize) {
+        let height = self.grid.height();
+        self.scroll_region
+            .map(|(t, b)| (t, b.min(height.saturating_sub(1))))
+            .unwrap_or((0, height.saturating_sub(1)))
+    }
+
     fn scroll_up(&mut self, n: usize) {
         let width = self.grid.width();
-        let height = self.grid.height();
+        let (top, bottom) = self.effective_scroll_region();
 
-        for y in 0..n.min(height) {
-            if let Some(row) = self.grid.row(y) {
-                self.scrollback.push_back(row.to_vec());
+        if top == 0 && bottom == self.grid.height().saturating_sub(1) {
+            for y in 0..n.min(bottom + 1) {
+                if let Some(row) = self.grid.row(y) {
+                    self.scrollback.push_back(row.to_vec());
+                }
+            }
+            while self.scrollback.len() > self.scrollback_limit {
+                self.scrollback.pop_front();
             }
         }
 
-        while self.scrollback.len() > self.scrollback_limit {
-            self.scrollback.pop_front();
-        }
-
-        for y in n..height {
+        for y in (top + n)..=bottom {
             for x in 0..width {
                 if let Some(cell) = self.grid.get(x, y).cloned() {
                     let _ = self.grid.set(x, y - n, cell);
@@ -269,20 +279,47 @@ impl TerminalBuffer {
             }
         }
 
-        for y in (height.saturating_sub(n))..height {
+        let clear_start = if bottom + 1 >= n { bottom + 1 - n } else { top };
+        for y in clear_start..=bottom {
             for x in 0..width {
                 let _ = self.grid.set(x, y, Cell::default());
             }
         }
 
-        self.cursor_y = self.cursor_y.saturating_sub(n);
+        if top == 0 && bottom == self.grid.height().saturating_sub(1) {
+            self.cursor_y = self.cursor_y.saturating_sub(n);
+        }
     }
 
     fn scroll_down(&mut self, n: usize) {
         let width = self.grid.width();
-        let height = self.grid.height();
+        let (top, bottom) = self.effective_scroll_region();
 
-        for y in (0..(height - n)).rev() {
+        for y in (top..=(bottom.saturating_sub(n))).rev() {
+            for x in 0..width {
+                if let Some(cell) = self.grid.get(x, y).cloned() {
+                    let _ = self.grid.set(x, y + n, cell);
+                }
+            }
+        }
+        for y in top..=(top + n - 1).min(bottom) {
+            for x in 0..width {
+                let _ = self.grid.set(x, y, Cell::default());
+            }
+        }
+    }
+
+    fn insert_lines_at_cursor(&mut self, n: usize) {
+        let width = self.grid.width();
+        let (_, bottom) = self.effective_scroll_region();
+        let start = self.cursor_y;
+
+        if start > bottom {
+            return;
+        }
+
+        // Shift rows
+        for y in (start..=(bottom.saturating_sub(n))).rev() {
             for x in 0..width {
                 if let Some(cell) = self.grid.get(x, y).cloned() {
                     let _ = self.grid.set(x, y + n, cell);
@@ -290,7 +327,33 @@ impl TerminalBuffer {
             }
         }
 
-        for y in 0..n.min(height) {
+        // Clear the n lines at cursor
+        for y in start..(start + n).min(bottom + 1) {
+            for x in 0..width {
+                let _ = self.grid.set(x, y, Cell::default());
+            }
+        }
+    }
+
+    fn delete_lines_at_cursor(&mut self, n: usize) {
+        let width = self.grid.width();
+        let (_, bottom) = self.effective_scroll_region();
+        let start = self.cursor_y;
+
+        if start > bottom {
+            return;
+        }
+
+        for y in (start + n)..=bottom {
+            for x in 0..width {
+                if let Some(cell) = self.grid.get(x, y).cloned() {
+                    let _ = self.grid.set(x, y - n, cell);
+                }
+            }
+        }
+
+        let clear_start = if bottom + 1 >= n { bottom + 1 - n } else { start };
+        for y in clear_start..=bottom {
             for x in 0..width {
                 let _ = self.grid.set(x, y, Cell::default());
             }
@@ -301,10 +364,11 @@ impl TerminalBuffer {
         match cmd {
             Command::Print(c) => {
                 if c == '\n' {
-                    self.cursor_x = 0;
-                    self.cursor_y += 1;
-                    if self.cursor_y >= self.grid.height() {
+                    let (_, bottom) = self.effective_scroll_region();
+                    if self.cursor_y >= bottom {
                         self.scroll_up(1);
+                    } else {
+                        self.cursor_y += 1;
                     }
                 } else if c == '\r' {
                     self.cursor_x = 0;
@@ -316,10 +380,11 @@ impl TerminalBuffer {
             }
             Command::Execute(byte) => match byte {
                 b'\n' => {
-                    self.cursor_x = 0;
-                    self.cursor_y += 1;
-                    if self.cursor_y >= self.grid.height() {
+                    let (_, bottom) = self.effective_scroll_region();
+                    if self.cursor_y >= bottom {
                         self.scroll_up(1);
+                    } else {
+                        self.cursor_y += 1;
                     }
                 }
                 b'\r' => self.cursor_x = 0,
@@ -442,10 +507,10 @@ impl TerminalBuffer {
                 self.scroll_down(n);
             }
             Command::InsertLine(n) => {
-                self.scroll_down(n);
+                self.insert_lines_at_cursor(n);
             }
             Command::DeleteLine(n) => {
-                self.scroll_up(n);
+                self.delete_lines_at_cursor(n);
             }
             Command::EraseChars(n) => {
                 for i in 0..n {
@@ -579,6 +644,33 @@ impl TerminalBuffer {
             }
             Command::CopyToClipboard(content) => {
                 self.pending_clipboard.push(content);
+            }
+            Command::MoveCursorToRow(row) => {
+                // VPA
+                self.cursor_y = row.min(self.grid.height().saturating_sub(1));
+            }
+            Command::MoveCursorToColumn(col) => {
+                // CHA/HPA
+                self.cursor_x = col.min(self.grid.width().saturating_sub(1));
+            }
+            Command::CursorNextLine(n) => {
+                // CNL
+                self.cursor_x = 0;
+                self.cursor_y = (self.cursor_y + n).min(self.grid.height().saturating_sub(1));
+            }
+            Command::CursorPreviousLine(n) => {
+                // CPL
+                self.cursor_x = 0;
+                self.cursor_y = self.cursor_y.saturating_sub(n);
+            }
+            Command::ReverseIndex => {
+                // RI (ESC M)
+                let (top, _) = self.effective_scroll_region();
+                if self.cursor_y <= top {
+                    self.scroll_down(1);
+                } else {
+                    self.cursor_y -= 1;
+                }
             }
         }
         Ok(())

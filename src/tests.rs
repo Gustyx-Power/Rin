@@ -308,3 +308,137 @@ mod priority_feature_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod scroll_region_tests {
+    use crate::core::TerminalBuffer;
+    use crate::parser::Command;
+
+    fn put_char(buf: &mut TerminalBuffer, x: usize, y: usize, c: char) {
+        buf.execute_command(Command::MoveCursor(x, y)).unwrap();
+        buf.write_char(c).unwrap();
+    }
+
+    fn get_char(buf: &TerminalBuffer, x: usize, y: usize) -> char {
+        buf.grid().get(x, y).map(|c| c.character).unwrap_or(' ')
+    }
+
+    #[test]
+    fn test_scroll_region_scroll_up() {
+        let mut buf = TerminalBuffer::new(10, 8);
+
+        // Put identifiable chars in rows 2-5
+        put_char(&mut buf, 0, 2, 'A');
+        put_char(&mut buf, 0, 3, 'B');
+        put_char(&mut buf, 0, 4, 'C');
+        put_char(&mut buf, 0, 5, 'D');
+        // Put a char outside the region
+        put_char(&mut buf, 0, 0, 'Z');
+        put_char(&mut buf, 0, 7, 'Y');
+
+        // Set scroll region to rows 2-5 (1-indexed: 3-6)
+        buf.execute_command(Command::SetScrollRegion { top: 2, bottom: 5 })
+            .unwrap();
+        buf.execute_command(Command::ScrollUp(1)).unwrap();
+
+        // Row 0 and 7 should be untouched
+        assert_eq!(get_char(&buf, 0, 0), 'Z');
+        assert_eq!(get_char(&buf, 0, 7), 'Y');
+        assert_eq!(get_char(&buf, 0, 2), 'B');
+        assert_eq!(get_char(&buf, 0, 3), 'C');
+        assert_eq!(get_char(&buf, 0, 4), 'D');
+        assert_eq!(get_char(&buf, 0, 5), ' ');
+    }
+
+    #[test]
+    fn test_scroll_region_scroll_down() {
+        let mut buf = TerminalBuffer::new(10, 8);
+
+        put_char(&mut buf, 0, 2, 'A');
+        put_char(&mut buf, 0, 3, 'B');
+        put_char(&mut buf, 0, 4, 'C');
+        put_char(&mut buf, 0, 5, 'D');
+        put_char(&mut buf, 0, 0, 'Z');
+
+        buf.execute_command(Command::SetScrollRegion { top: 2, bottom: 5 })
+            .unwrap();
+        buf.execute_command(Command::ScrollDown(1)).unwrap();
+
+        assert_eq!(get_char(&buf, 0, 0), 'Z');
+        assert_eq!(get_char(&buf, 0, 2), ' ');
+        assert_eq!(get_char(&buf, 0, 3), 'A');
+        assert_eq!(get_char(&buf, 0, 4), 'B');
+        assert_eq!(get_char(&buf, 0, 5), 'C');
+    }
+
+    #[test]
+    fn test_insert_line_at_cursor() {
+        let mut buf = TerminalBuffer::new(10, 8);
+
+        put_char(&mut buf, 0, 1, 'A');
+        put_char(&mut buf, 0, 2, 'B');
+        put_char(&mut buf, 0, 3, 'C');
+        put_char(&mut buf, 0, 5, 'E');
+
+        buf.execute_command(Command::SetScrollRegion { top: 1, bottom: 5 })
+            .unwrap();
+        // Move cursor to row 2  
+        buf.execute_command(Command::MoveCursor(0, 2)).unwrap();
+        buf.execute_command(Command::InsertLine(1)).unwrap();
+
+        // Row 1 untouched
+        assert_eq!(get_char(&buf, 0, 1), 'A');
+        // Row 2 should be blank
+        assert_eq!(get_char(&buf, 0, 2), ' ');
+        // B shifted to row 3, C to row 4
+        assert_eq!(get_char(&buf, 0, 3), 'B');
+        assert_eq!(get_char(&buf, 0, 4), 'C');
+        // E was at row 5 but row 4 shifts to row 5, overwriting E
+        assert_eq!(get_char(&buf, 0, 5), ' ');
+    }
+
+    #[test]
+    fn test_delete_line_at_cursor() {
+        let mut buf = TerminalBuffer::new(10, 8);
+
+        put_char(&mut buf, 0, 1, 'A');
+        put_char(&mut buf, 0, 2, 'B');
+        put_char(&mut buf, 0, 3, 'C');
+        put_char(&mut buf, 0, 4, 'D');
+
+        buf.execute_command(Command::SetScrollRegion { top: 1, bottom: 4 })
+            .unwrap();
+        buf.execute_command(Command::MoveCursor(0, 2)).unwrap();
+        buf.execute_command(Command::DeleteLine(1)).unwrap();
+
+        // Row 1 untouched
+        assert_eq!(get_char(&buf, 0, 1), 'A');
+        assert_eq!(get_char(&buf, 0, 2), 'C');
+        assert_eq!(get_char(&buf, 0, 3), 'D');
+        assert_eq!(get_char(&buf, 0, 4), ' ');
+    }
+
+    #[test]
+    fn test_newline_at_scroll_region_bottom() {
+        let mut buf = TerminalBuffer::new(10, 8);
+
+        put_char(&mut buf, 0, 2, 'A');
+        put_char(&mut buf, 0, 3, 'B');
+        put_char(&mut buf, 0, 4, 'C');
+        // Outside region
+        put_char(&mut buf, 0, 0, 'Z');
+        put_char(&mut buf, 0, 7, 'Y');
+
+        buf.execute_command(Command::SetScrollRegion { top: 2, bottom: 4 })
+            .unwrap();
+        buf.execute_command(Command::MoveCursor(0, 4)).unwrap();
+        buf.execute_command(Command::Print('\n')).unwrap();
+
+        // Outside region untouched
+        assert_eq!(get_char(&buf, 0, 0), 'Z');
+        assert_eq!(get_char(&buf, 0, 7), 'Y');
+        assert_eq!(get_char(&buf, 0, 2), 'B');
+        assert_eq!(get_char(&buf, 0, 3), 'C');
+        assert_eq!(get_char(&buf, 0, 4), ' ');
+    }
+}
