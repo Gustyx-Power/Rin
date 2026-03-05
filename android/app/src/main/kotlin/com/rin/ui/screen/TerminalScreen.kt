@@ -13,17 +13,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.rin.RinLib
+import com.rin.terminal.SessionManager
 import com.rin.ui.components.ExtraKeysBar
+import com.rin.ui.components.SessionDialog
 import com.rin.ui.components.TerminalSurface
 
 @Composable
 fun TerminalScreen(
-    engineHandle: Long,
+    sessionManager: SessionManager,
     modifier: Modifier = Modifier
 ) {
     var ctrlPressed by remember { mutableStateOf(false) }
     var keyRepeating by remember { mutableStateOf(false) }
     var terminalView by remember { mutableStateOf<View?>(null) }
+    var showSessionDialog by remember { mutableStateOf(false) }
+
+    val activeSession = sessionManager.activeSession
+    val engineHandle = activeSession?.engineHandle ?: 0L
 
     Column(
         modifier = modifier
@@ -59,8 +65,29 @@ fun TerminalScreen(
             onRepeatStateChange = { repeating ->
                 keyRepeating = repeating
             },
+            sessionName = activeSession?.name ?: "No Session",
+            onSessionButtonClick = { showSessionDialog = true },
             modifier = Modifier.fillMaxWidth()
         )
     }
-}
 
+    if (showSessionDialog) {
+        SessionDialog(
+            sessions = sessionManager.sessions,
+            activeIndex = sessionManager.activeIndex,
+            onDismiss = { showSessionDialog = false },
+            onSwitchSession = { index ->
+                sessionManager.switchSession(index)
+            },
+            onCreateSession = {
+                sessionManager.createSession()
+            },
+            onRemoveSession = { index ->
+                sessionManager.removeSession(index)
+            },
+            onRenameSession = { index, newName ->
+                sessionManager.renameSession(index, newName)
+            }
+        )
+    }
+}
